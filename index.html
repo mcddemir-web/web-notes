@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Web Notları</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#1f6feb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Notlar">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--text:#1b1f24;--muted:#667085;--line:#d9dde3;--brand:#1f6feb;--brand-text:#fff;--danger:#c0392b;--ok:#1a7f37}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1318;--card:#171c23;--text:#e6e9ee;--muted:#8b95a5;--line:#2a313b;--brand:#4c8dff;--brand-text:#06101f;--danger:#ff6b5e;--ok:#3fb950}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{padding-bottom:env(safe-area-inset-bottom)}
+header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
+nav{display:flex;max-width:720px;margin:0 auto}
+nav button{flex:1;padding:14px 8px;background:none;border:0;border-bottom:3px solid transparent;color:var(--muted);font:inherit;font-weight:600}
+nav button.on{color:var(--brand);border-bottom-color:var(--brand)}
+main{max-width:720px;margin:0 auto;padding:16px}
+section{display:none}section.on{display:block}
+label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin:14px 0 6px}
+input,select,textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--text);font:inherit}
+textarea{min-height:160px;resize:vertical}
+.row{display:flex;gap:8px}.row>*{flex:1}
+button.btn{padding:13px 16px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text);font:inherit;font-weight:600}
+button.primary{background:var(--brand);color:var(--brand-text);border-color:var(--brand)}
+button:disabled{opacity:.5}
+.thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.thumb{position:relative;width:84px;height:84px;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb b{position:absolute;top:2px;right:2px;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.65);color:#fff;text-align:center;line-height:24px;font-size:14px}
+.item{display:block;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:8px 0;color:inherit;text-decoration:none}
+.item small{color:var(--muted)}
+.hint{color:var(--muted);font-size:13px;margin-top:6px}
+#toast{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));max-width:696px;margin:0 auto;padding:12px 14px;border-radius:12px;background:var(--text);color:var(--bg);display:none;z-index:9}
+#queue{display:none;background:#fff3cd;color:#664d03;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:14px}
+</style>
+</head>
+<body>
+<header><nav>
+  <button data-tab="yeni" class="on">Yeni not</button>
+  <button data-tab="notlar">Notlar</button>
+  <button data-tab="ayar">Ayarlar</button>
+</nav></header>
+<main>
+  <div id="queue"></div>
+
+  <section id="yeni" class="on">
+    <label for="kat">Kategori</label>
+    <div class="row">
+      <select id="kat"></select>
+      <button class="btn" id="katEkle" style="flex:0 0 auto">+ Yeni</button>
+    </div>
+    <label for="baslik">Başlık (boş bırakırsan ilk satır kullanılır)</label>
+    <input id="baslik" autocomplete="off">
+    <label for="url">Kaynak bağlantısı (isteğe bağlı)</label>
+    <input id="url" type="url" inputmode="url" autocomplete="off" placeholder="https://">
+    <label for="metin">Not</label>
+    <textarea id="metin" placeholder="Metni yapıştır veya yaz. Ekran görüntüsünü buraya da yapıştırabilirsin."></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="resimBtn">📷 Görsel ekle</button>
+    </div>
+    <input id="resim" type="file" accept="image/*" multiple hidden>
+    <div class="thumbs" id="thumbs"></div>
+    <button class="btn primary" id="kaydet" style="width:100%;margin-top:18px">Kaydet</button>
+    <div class="hint">Not GitHub'a Markdown dosyası olarak commit edilir. İnternet yoksa cihazda bekler, bağlantı gelince gönderilir.</div>
+  </section>
+
+  <section id="notlar">
+    <label for="listeKat">Kategori</label>
+    <select id="listeKat"></select>
+    <div id="liste"></div>
+  </section>
+
+  <section id="ayar">
+    <label for="owner">GitHub kullanıcı adı</label>
+    <input id="owner" autocomplete="off" autocapitalize="off">
+    <label for="repo">Not deposu (private)</label>
+    <input id="repo" autocomplete="off" autocapitalize="off">
+    <label for="branch">Dal (boşsa varsayılan dal)</label>
+    <input id="branch" autocomplete="off" autocapitalize="off">
+    <label for="token">Erişim anahtarı (fine-grained token)</label>
+    <input id="token" type="password" autocomplete="off" autocapitalize="off" placeholder="github_pat_...">
+    <div class="hint">Anahtar yalnızca bu cihazda saklanır. Sadece not deposuna "Contents: Read and write" yetkisi ver.</div>
+    <div class="row" style="margin-top:16px">
+      <button class="btn primary" id="ayarKaydet">Kaydet ve dene</button>
+    </div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const LS = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+const DEFAULT_CATS = [{ad:'Hayat', slug:'hayat'}, {ad:'Gümrük Mevzuat', slug:'gumruk-mevzuat'}];
+let cfg = Object.assign({owner:'mcddemir-web', repo:'web-notes', branch:'', token:''}, LS.get('cfg', {}));
+let cats = LS.get('cats', DEFAULT_CATS);
+let images = []; // {name, b64, url}
+
+/* ---------- yardımcılar ---------- */
+function toast(msg, ms = 3000){
+  const t = $('#toast'); t.textContent = msg; t.style.display = 'block';
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = 'none', ms);
+}
+const enc = p => p.split('/').map(encodeURIComponent).join('/');
+const b64 = s => { const b = new TextEncoder().encode(s); let bin = ''; b.forEach(x => bin += String.fromCharCode(x)); return btoa(bin); };
+const unb64 = s => { const bin = atob(s.replace(/\n/g, '')); const a = Uint8Array.from(bin, c => c.charCodeAt(0)); return new TextDecoder().decode(a); };
+function slugify(s){
+  return s.replace(/İ/g,'i').replace(/I/g,'i').toLowerCase()
+    .replace(/ç/g,'c').replace(/ğ/g,'g').replace(/ı/g,'i').replace(/ö/g,'o').replace(/ş/g,'s').replace(/ü/g,'u')
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60);
+}
+const pad = n => String(n).padStart(2, '0');
+function stamp(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`; }
+
+/* ---------- GitHub API ---------- */
+async function gh(method, path, body){
+  const r = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/${path}`, {
+    method,
+    headers: Object.assign({
+      'Authorization': `Bearer ${cfg.token}`,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28'
+    }, body ? {'Content-Type': 'application/json'} : {}),
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if(!r.ok){
+    let m = r.statusText; try{ m = (await r.json()).message || m; }catch(e){}
+    const e = new Error(m); e.status = r.status; throw e;
+  }
+  return r.status === 204 ? null : r.json();
+}
+const refQ = () => cfg.branch ? `?ref=${encodeURIComponent(cfg.branch)}` : '';
+async function putFile(path, contentB64, message, sha){
+  const body = {message, content: contentB64};
+  if(cfg.branch) body.branch = cfg.branch;
+  if(sha) body.sha = sha;
+  return gh('PUT', 'contents/' + enc(path), body);
+}
+async function remoteCats(){
+  try{
+    const f = await gh('GET', 'contents/kategoriler.json' + refQ());
+    return {list: JSON.parse(unb64(f.content)), sha: f.sha};
+  }catch(e){
+    if(e.status === 404) return {list: null, sha: null};
+    throw e;
+  }
+}
+async function ensureCat(cat){
+  for(let i = 0; i < 2; i++){
+    const rc = await remoteCats();
+    const list = rc.list || DEFAULT_CATS.slice();
+    if(list.some(c => c.slug === cat.slug) && rc.list) return;
+    if(!list.some(c => c.slug === cat.slug)) list.push(cat);
+    try{
+      await putFile('kategoriler.json', b64(JSON.stringify(list, null, 2)), `Kategori: ${cat.ad}`, rc.sha);
+      cats = list; LS.set('cats', cats); return;
+    }catch(e){ if(e.status !== 409 && e.status !== 422) throw e; }
+  }
+}
+
+/* ---------- not üretimi ---------- */
+function buildNote(n){
+  const d = new Date(n.ts);
+  const lines = (n.text || '').split('\n');
+  const title = (n.title || '').trim() || (lines.find(l => l.trim()) || 'Not').trim().slice(0, 80);
+  const fn = `${stamp(d)}-${slugify(title) || 'not'}.md`;
+  const imgs = n.images.map((im, i) => ({path: `ekler/${d.getFullYear()}/${stamp(d)}-${i+1}.${im.ext}`, b64: im.b64}));
+  let md = `---\nbaslik: ${JSON.stringify(title)}\nkategori: ${JSON.stringify(n.cat.ad)}\ntarih: ${d.toISOString()}\n`;
+  if(n.url) md += `kaynak: ${JSON.stringify(n.url)}\n`;
+  md += `---\n\n# ${title}\n\n`;
+  if(n.url) md += `Kaynak: ${n.url}\n\n`;
+  if(n.text) md += `${n.text}\n\n`;
+  imgs.forEach(im => md += `![](../../${im.path})\n\n`);
+  return {path: `notlar/${n.cat.slug}/${fn}`, md, imgs, title};
+}
+async function commitNote(n){
+  await ensureCat(n.cat);
+  const b = buildNote(n);
+  for(const im of b.imgs) await putFile(im.path, im.b64, `Ek: ${b.title}`);
+  await putFile(b.path, b64(b.md), `Not: ${b.title}`);
+  return b;
+}
+
+/* ---------- çevrimdışı kuyruk (IndexedDB) ---------- */
+const idb = () => new Promise((res, rej) => {
+  const r = indexedDB.open('notlar', 1);
+  r.onupgradeneeded = () => r.result.createObjectStore('q', {keyPath: 'id', autoIncrement: true});
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+});
+async function qop(mode, fn){
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('q', mode); const st = tx.objectStore('q');
+    const out = fn(st); tx.oncomplete = () => res(out.result); tx.onerror = () => rej(tx.error);
+  });
+}
+const qAdd = n => qop('readwrite', s => s.add(n));
+const qAll = () => qop('readonly', s => s.getAll());
+const qDel = id => qop('readwrite', s => s.delete(id));
+async function refreshQueueBadge(){
+  const all = await qAll().catch(() => []);
+  const el = $('#queue');
+  if(all.length){ el.style.display = 'block'; el.textContent = `${all.length} not gönderilmeyi bekliyor. Bağlantı gelince otomatik gönderilir.`; }
+  else el.style.display = 'none';
+}
+let flushing = false;
+async function flushQueue(){
+  if(flushing || !cfg.token) return; flushing = true;
+  try{
+    const all = await qAll();
+    for(const n of all){
+      try{ await commitNote(n); await qDel(n.id); toast('Bekleyen not gönderildi'); }
+      catch(e){ if(!(e instanceof TypeError)) toast('Gönderilemedi: ' + e.message, 5000); break; }
+    }
+  }catch(e){}
+  flushing = false; refreshQueueBadge();
+}
+
+/* ---------- görseller ---------- */
+const readDataURL = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
+async function prepImage(f){
+  let url = await readDataURL(f); let type = f.type || 'image/png';
+  if(f.size > 1200000){
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const k = Math.min(1, 2000 / Math.max(img.width, img.height));
+    const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    url = c.toDataURL('image/jpeg', 0.85); type = 'image/jpeg';
+  }
+  const ext = ({'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','image/heic':'heic'})[type] || 'png';
+  return {ext, b64: url.split(',')[1], url};
+}
+async function addFiles(files){
+  for(const f of files){
+    if(!f.type.startsWith('image/')) continue;
+    try{ images.push(await prepImage(f)); }catch(e){ toast('Görsel okunamadı'); }
+  }
+  drawThumbs();
+}
+function drawThumbs(){
+  const box = $('#thumbs'); box.innerHTML = '';
+  images.forEach((im, i) => {
+    const d = document.createElement('div'); d.className = 'thumb';
+    d.innerHTML = '<img alt=""><b>✕</b>'; d.querySelector('img').src = im.url;
+    d.querySelector('b').onclick = () => { images.splice(i, 1); drawThumbs(); };
+    box.appendChild(d);
+  });
+}
+
+/* ---------- arayüz ---------- */
+function fillCats(){
+  for(const id of ['#kat', '#listeKat']){
+    const sel = $(id), cur = sel.value; sel.innerHTML = '';
+    cats.forEach(c => { const o = document.createElement('option'); o.value = c.slug; o.textContent = c.ad; sel.appendChild(o); });
+    if(cur && cats.some(c => c.slug === cur)) sel.value = cur;
+  }
+  const last = LS.get('lastCat', null); if(last && cats.some(c => c.slug === last)) $('#kat').value = last;
+}
+function showTab(t){
+  document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === t));
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  if(t === 'notlar') loadList();
+}
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+
+$('#katEkle').onclick = () => {
+  const ad = (prompt('Yeni kategori adı:') || '').trim(); if(!ad) return;
+  const slug = slugify(ad); if(!slug){ toast('Geçersiz ad'); return; }
+  if(!cats.some(c => c.slug === slug)) cats.push({ad, slug});
+  LS.set('cats', cats); fillCats(); $('#kat').value = slug;
+};
+$('#resimBtn').onclick = () => $('#resim').click();
+$('#resim').onchange = async e => { await addFiles([...e.target.files]); e.target.value = ''; };
+$('#metin').addEventListener('paste', async e => {
+  const fs = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'));
+  if(fs.length){ e.preventDefault(); await addFiles(fs); }
+});
+
+$('#kaydet').onclick = async () => {
+  if(!cfg.token){ toast('Önce Ayarlar sekmesinden anahtarı gir'); showTab('ayar'); return; }
+  const text = $('#metin').value.trim(), title = $('#baslik').value.trim(), url = $('#url').value.trim();
+  if(!text && !images.length && !url){ toast('Boş not kaydedilmez'); return; }
+  const cat = cats.find(c => c.slug === $('#kat').value) || cats[0];
+  LS.set('lastCat', cat.slug);
+  const note = {ts: Date.now(), cat, title, url, text, images: images.map(({ext, b64}) => ({ext, b64}))};
+  const btn = $('#kaydet'); btn.disabled = true; btn.textContent = 'Kaydediliyor…';
+  try{
+    await commitNote(note); toast('Kaydedildi ✓');
+  }catch(e){
+    if(e instanceof TypeError || !navigator.onLine){ await qAdd(note); toast('Çevrimdışı: not cihazda bekletiliyor'); }
+    else{ toast('Hata: ' + e.message, 6000); btn.disabled = false; btn.textContent = 'Kaydet'; return; }
+  }
+  $('#metin').value = ''; $('#baslik').value = ''; $('#url').value = ''; images = []; drawThumbs();
+  btn.disabled = false; btn.textContent = 'Kaydet'; refreshQueueBadge(); fillCats();
+};
+
+async function loadList(){
+  const box = $('#liste'); box.innerHTML = '<div class="hint">Yükleniyor…</div>';
+  if(!cfg.token){ box.innerHTML = '<div class="hint">Önce Ayarlar sekmesini doldur.</div>'; return; }
+  try{
+    const files = await gh('GET', 'contents/' + enc('notlar/' + $('#listeKat').value) + refQ());
+    files.sort((a, b) => b.name.localeCompare(a.name));
+    box.innerHTML = files.length ? '' : '<div class="hint">Bu kategoride not yok.</div>';
+    files.filter(f => f.name.endsWith('.md')).forEach(f => {
+      const m = f.name.match(/^(\d{4}-\d{2}-\d{2})-\d{6}-(.*)\.md$/);
+      const a = document.createElement('a'); a.className = 'item'; a.href = f.html_url; a.target = '_blank'; a.rel = 'noopener';
+      a.innerHTML = '<div></div><small></small>';
+      a.children[0].textContent = m ? m[2].replace(/-/g, ' ') : f.name; a.children[1].textContent = m ? m[1] : '';
+      box.appendChild(a);
+    });
+  }catch(e){ box.innerHTML = ''; const d = document.createElement('div'); d.className = 'hint'; d.textContent = e.status === 404 ? 'Bu kategoride henüz not yok.' : 'Hata: ' + e.message; box.appendChild(d); }
+}
+$('#listeKat').onchange = loadList;
+
+$('#ayarKaydet').onclick = async () => {
+  cfg = {owner: $('#owner').value.trim(), repo: $('#repo').value.trim(), branch: $('#branch').value.trim(), token: $('#token').value.trim()};
+  LS.set('cfg', cfg);
+  try{
+    const r = await gh('GET', '');
+    if(r.permissions && r.permissions.push === false){ toast('Bağlandı ama yazma yetkisi yok', 6000); return; }
+    const rc = await remoteCats(); if(rc.list){ cats = rc.list; LS.set('cats', cats); fillCats(); }
+    toast('Bağlantı tamam ✓' + (r.private ? ' (private depo)' : ' ⚠ depo herkese açık!'), 5000);
+    flushQueue();
+  }catch(e){ toast(e.status === 404 ? 'Depo bulunamadı veya anahtarın erişimi yok' : 'Hata: ' + e.message, 6000); }
+};
+
+/* ---------- başlangıç ---------- */
+function init(){
+  $('#owner').value = cfg.owner; $('#repo').value = cfg.repo; $('#branch').value = cfg.branch; $('#token').value = cfg.token;
+  fillCats(); refreshQueueBadge();
+  // Android "Paylaş" menüsünden gelen veri
+  const p = new URLSearchParams(location.search);
+  if(p.has('text') || p.has('url') || p.has('title')){
+    let text = p.get('text') || '', url = p.get('url') || '';
+    const m = text.match(/https?:\/\/\S+/);
+    if(!url && m){ url = m[0]; text = text.replace(m[0], '').trim(); }
+    $('#metin').value = text; $('#url').value = url; $('#baslik').value = p.get('title') || '';
+    history.replaceState(null, '', location.pathname);
+  }
+  if(!cfg.token) showTab('ayar');
+  if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  window.addEventListener('online', flushQueue);
+  flushQueue();
+  if(cfg.token) remoteCats().then(rc => { if(rc.list){ cats = rc.list; LS.set('cats', cats); fillCats(); } }).catch(() => {});
+}
+init();
+</script>
+</body>
+</html>
